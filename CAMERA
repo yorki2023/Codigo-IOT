@@ -1,0 +1,20 @@
+void setup() {
+  // USB-Serial: conexión con la PC (por USB)
+  Serial.begin(115200);
+
+  // UART-Serial1: conexión con ESP32-CAM
+  // RX = GPIO3, TX = GPIO1 (ajusta si necesitas)
+  Serial1.begin(115200, SERIAL_8N1, 3, 1); 
+}
+
+void loop() {
+  // Datos de PC a ESP32-CAM
+  while (Serial.available()) {
+    Serial1.write(Serial.read());
+  }
+
+  // Datos de ESP32-CAM a PC
+  while (Serial1.available()) {
+    Serial.write(Serial1.read());
+  }
+}
