@@ -1,0 +1,107 @@
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include <ESP32Servo.h>
+
+const char* ssid = "yo";
+const char* password = "12345678";
+
+// IP fija para el ESP32 de control
+IPAddress local_IP(192, 168, 142, 200);
+IPAddress gateway(192, 168, 142, 121);
+IPAddress subnet(255, 255, 255, 0);
+
+AsyncWebServer server(80);
+Servo servoComida;
+Servo servoAgua;
+
+const int pinServoComida = 4;
+const int pinServoAgua = 18;
+
+void moverServo(Servo& servo, int grados) {
+  servo.write(grados);
+  delay(1000);
+  servo.write(0);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Configurar IP estática
+  if (!WiFi.config(local_IP, gateway, subnet)) {
+    Serial.println("⚠️ Error al configurar IP estática.");
+  }
+
+  WiFi.begin(ssid, password);
+  Serial.print("Conectando");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+  Serial.println("✅ Conectado a WiFi.");
+  Serial.print("Dirección IP: ");
+  Serial.println(WiFi.localIP());
+
+  servoComida.attach(pinServoComida);
+  servoAgua.attach(pinServoAgua);
+
+  // Página principal
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+  String html = R"rawliteral(
+    <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dispensador PETJA</title>
+    <style>
+    body { font-family: Arial; text-align: center; background: #fcb69f; }
+    button { padding: 15px 30px; font-size: 16px; margin: 10px; border-radius: 10px; background: #4CAF50; color: white; border: none; }
+    button:hover { background: #45a049; }
+    </style></head><body>
+    <h1>Dispensador Inteligente PETJA</h1>
+    <button onclick="dispensar('comida')">Dispensar Comida</button>
+    <button onclick="dispensar('agua')">Dispensar Agua</button>
+    <p id="respuesta" style="font-size: 18px; margin-top: 20px;"></p>
+    <br><br>
+    <h2>Video en Vivo</h2>
+    <iframe src="http://192.168.142.201" width="100%" height="480"></iframe>
+
+    <script>
+    function dispensar(tipo) {
+      fetch(`/dispensar?tipo=${tipo}`)
+        .then(response => response.text())
+        .then(texto => {
+          document.getElementById("respuesta").innerText = texto;
+        })
+        .catch(error => {
+          document.getElementById("respuesta").innerText = "❌ Error enviando comando";
+        });
+    }
+    </script>
+    </body></html>
+  )rawliteral";
+  request->send(200, "text/html", html);
+});
+
+
+  // Ruta para activar servos
+  server.on("/dispensar", HTTP_GET, [](AsyncWebServerRequest *request){
+    if (request->hasParam("tipo")) {
+      String tipo = request->getParam("tipo")->value();
+      if (tipo == "comida") {
+        moverServo(servoComida, 90);
+        request->send(200, "text/plain", "Comida dispensada");
+      } else if (tipo == "agua") {
+        moverServo(servoAgua, 90);
+        request->send(200, "text/plain", "Agua dispensada");
+      } else {
+        request->send(400, "text/plain", "Tipo no válido");
+      }
+    } else {
+      request->send(400, "text/plain", "Falta parámetro 'tipo'");
+    }
+  });
+
+  server.begin();
+}
+void loop() {}
+
